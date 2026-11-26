@@ -246,7 +246,7 @@ return Economy
         <Properties>
           <string name="Name">GameConfig</string>
           <string name="Source"><![CDATA[return table.freeze({
-	Version = "1.1",
+	Version = "1.1.1",
 	MaxPlayers = 8,
 	StartCash = 1000,
 	AdminMaxWalkSpeed = 100,
@@ -2702,6 +2702,7 @@ local function outline(object, color, alpha)
 	stroke.Color,stroke.Transparency = color,alpha
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = object
+	return stroke
 end
 
 local function limit(object, max)
@@ -2727,14 +2728,25 @@ local function button(parent,position,size,color,callback)
 	return control
 end
 
-local function numeric(parent, position, size)
+local function readInteger(text, minimum, maximum)
+	local digits = text:gsub("%s",""):gsub("\u{00A0}",""):gsub("\u{202F}","")
+	if #digits > 16 or not digits:match("^%d+$") then return nil end
+	local value = tonumber(digits)
+	if value and value >= minimum and value <= maximum then return value end
+end
+
+local function numeric(parent, position, size, minimum, maximum)
 	local input = make("TextBox",parent,{
 		Position=position, Size=size, BackgroundColor3=field, Text="", ClearTextOnFocus=false,
 		Font=Enum.Font.GothamBold, TextColor3=white, TextSize=15, PlaceholderColor3=muted,
-		TextInputType=Enum.TextInputType.Number,
 	})
 	corner(input,9)
-	outline(input,sky,.72)
+	local border = outline(input,sky,.72)
+	input:GetPropertyChangedSignal("Text"):Connect(function()
+		local invalid = input.Text ~= "" and readInteger(input.Text,minimum,maximum) == nil
+		border.Color = invalid and warning or sky
+		border.Transparency = invalid and .25 or .72
+	end)
 	return input
 end
 
@@ -2868,10 +2880,9 @@ function AdminController.start(gui, hud, title, remote)
 		end)
 	end
 
-	local function numberAction(action, input)
-		local raw = input.Text:gsub("%s","")
-		local value = #raw <= 16 and raw:match("^%d+$") and tonumber(raw)
-		if not value then showStatus("adminInvalidValue",nil,warning) return end
+	local function numberAction(action, input, minimum, maximum)
+		local value = readInteger(input.Text,minimum,maximum)
+		if value == nil then showStatus("adminInvalidValue",nil,warning) return end
 		request(action,value)
 	end
 
@@ -2894,12 +2905,12 @@ function AdminController.start(gui, hud, title, remote)
 	bind(text(cash,UDim2.fromOffset(11,5),UDim2.new(.48,-11,0,28),sky,15),"adminBalanceLabel")
 	local amount = text(cash,UDim2.new(.48,0,0,5),UDim2.new(.52,-11,0,28),mint,15)
 	amount.TextXAlignment = Enum.TextXAlignment.Right
-	local cashInput = numeric(cash,UDim2.fromOffset(11,37),UDim2.new(1,-22,0,42))
+	local cashInput = numeric(cash,UDim2.fromOffset(11,37),UDim2.new(1,-22,0,42),0,Game.MaxCash)
 	bind(button(cash,UDim2.fromOffset(11,85),UDim2.new(.5,-15,0,44),accent,function()
-		numberAction("addCash",cashInput)
+		numberAction("addCash",cashInput,1,Game.MaxCash)
 	end),"adminAddCash")
 	bind(button(cash,UDim2.new(.5,4,0,85),UDim2.new(.5,-15,0,44),neutral,function()
-		numberAction("setCash",cashInput)
+		numberAction("setCash",cashInput,0,Game.MaxCash)
 	end),"adminSetCash")
 	local infinity = button(cash,UDim2.fromOffset(11,135),UDim2.new(1,-22,0,44),neutral,function()
 		request("infiniteCash",player:GetAttribute("InfiniteCash") ~= true)
@@ -2937,9 +2948,9 @@ function AdminController.start(gui, hud, title, remote)
 
 	local movement = section(3,91)
 	bind(text(movement,UDim2.fromOffset(11,4),UDim2.new(1,-22,0,29),sky,15),"adminMovement")
-	local speed = numeric(movement,UDim2.fromOffset(11,37),UDim2.new(.5,-15,0,44))
+	local speed = numeric(movement,UDim2.fromOffset(11,37),UDim2.new(.5,-15,0,44),1,Game.AdminMaxWalkSpeed)
 	bind(button(movement,UDim2.new(.5,4,0,37),UDim2.new(.5,-15,0,44),neutral,function()
-		numberAction("walkSpeed",speed)
+		numberAction("walkSpeed",speed,1,Game.AdminMaxWalkSpeed)
 	end),"adminWalkSpeed")
 
 	local reset = section(4,61)
